@@ -24,10 +24,10 @@
         <username>String</username>
         <id>int</id>
       </contributor>
-      <minor/> [optional]
+      <minor/> [optional, does not seem to have any text nor any attributes]
       <comment>String</comment>
-      <model>String [usually wikitext]</model>
-      <format>String</format>
+      <model>String</model> [optional, no attributes, text "wikitext"]
+      <format>String</format> [optional, no attributes, text "text/x-wiki"]
       <text xml:space="preserve">String [main text] </text>
       <sha1>String</sha1>
     </revision>
@@ -38,4 +38,4 @@
 Notes:
 Pages look sorted (sort of) alphabetically
 {http://www.mediawiki.org/xml/export-0.10/}tagname - this is how our namespace looks
-
+15901127 artickes (fifteen million)
