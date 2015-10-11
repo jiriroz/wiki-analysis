@@ -1,0 +1,39 @@
+<mediawiki xmlns="http://www.mediawiki.org/xml/export-0.10/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mediawiki.org/xml/export-0.10/ http://www.mediawiki.org/xml/export-0.10.xsd" version="0.10" xml:lang="en">
+  <siteinfo>
+    <sitename>Wikipedia</sitename>
+    <dbname>enwiki</dbname>
+    <base>https://en.wikipedia.org/wiki/Main_Page</base>
+    <generator>MediaWiki 1.26wmf20</generator>
+    <case>first-letter</case>
+    <namespaces>
+      <namespace key=int case=String>String</namespace>
+    </namespaces>
+  </siteinfo>
+
+
+  <page>
+    <title>String</title>
+    <ns>int</ns>
+    <id>int</id>
+    <redirect title=String /> [optional]
+    <revision>
+      <id>int</id>
+      <parentid>int</parentid>
+      <timestamp>Date</timestamp>
+      <contributor>
+        <username>String</username>
+        <id>int</id>
+      </contributor>
+      <minor/> [optional]
+      <comment>String</comment>
+      <model>String [usually wikitext]</model>
+      <format>String</format>
+      <text xml:space="preserve">String [main text] </text>
+      <sha1>String</sha1>
+    </revision>
+  </page>
+
+</mediawiki>
+
+Notes:
+Pages look sorted (sort of) alphabetically
