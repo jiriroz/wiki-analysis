@@ -37,3 +37,5 @@
 
 Notes:
 Pages look sorted (sort of) alphabetically
+{http://www.mediawiki.org/xml/export-0.10/}tagname - this is how our namespace looks
+
