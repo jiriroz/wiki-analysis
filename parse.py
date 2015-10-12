@@ -1,6 +1,8 @@
 import xml.etree.ElementTree as etree
 import sqlite3 as sql
 import time
+import cPickle
+import zlib
 
 """Collect one row of the data at a time and
 keep track of the collection state."""
@@ -37,24 +39,28 @@ class DataCollector:
 
     """Update page values. We do not assume the XML tags for each
     page are ordered the same way."""
-    def updateValues(self, event, elem):
+    def updateValues(self, parser, event, elem):
         #registered start of a page
         if elem.tag[-4:] == "page" and event == "start":
             self.isCollecting = True
             self.countTotal += 1
 
         #this page is a redirecting page
-        if elem.tag[-8:] == "redirect" and self.isCollecting:
+        elif elem.tag[-8:] == "redirect" and self.isCollecting:
            self.redir = elem.attrib["title"].encode('utf-8')
            self.isRedir = True
 
         #collect a title
-        if elem.tag[-5:] == "title" and self.isCollecting and event == "end":
+        elif elem.tag[-5:] == "title" and self.isCollecting and event == "end":
             self.title = elem.text.encode('utf-8')
 
         #collect the article body
-        if elem.tag[-4:] == "text" and self.isCollecting and event == "end":
+        elif elem.tag[-4:] == "text" and self.isCollecting and event == "end":
             self.text = elem.text.encode('utf-8')
+
+        #end of the page, insert into DB
+        elif elem.tag[-4:] == "page" and event == "end":
+            self.insertValues(parser)
 
     def insertValues(self, parser):
         if self.isRedir:
@@ -64,12 +70,13 @@ class DataCollector:
         elif self.allCollected():
             #count serves as an ID
             try:
-                parser.insertRow(self.countCollected, self.title, self.text)
+                ID = self.countCollected
+                parser.insertRow(ID, self.title, self.text)
                 self.countCollected += 1
                 self.last = self.title
             except Exception as e:
                 print "Unable to insert row."
-                print "Reason: " + e
+                print "Reason: " + str(e)
                 print "Title: ", self.title
                 self.countNotCollected += 1
         else:
@@ -101,12 +108,18 @@ class Parser:
         self.cursor.execute(command, args)
 
     def oneStep(self, event, elem):
-        self.collector.updateValues(event, elem)
-        if elem.tag[-4:] == "page" and event == "end":
-            self.collector.insertValues(self)
+        try:
+            self.collector.updateValues(self, event, elem)
+        except Exception as e:
+            self.collector.reset()
         if self.collector.countTotal % 10000 == 0:
             self.conn.commit()
             self.root.clear() #clear the root
+        if self.collector.countTotal % 100000 == 0:
+            perc = self.collector.countTotal / 15901127.0
+            print str(100 * perc) + " percent."
+            self.collector.countTotal += 1
+
         #don't want to keep the element in memory
         if event == "end":
             elem.clear()
@@ -116,7 +129,7 @@ class Parser:
     """
     def parseData(self):
         fName = "wikiDBxml"
-        dbName = "wikiDB10E5.db"
+        dbName = "wikiDB.db"
         self.conn = self.createDatabase(dbName)
         #self.conn = sql.connect(dbName)
     
@@ -137,8 +150,8 @@ class Parser:
                 self.oneStep(event, elem)
             except Exception as e:
                 print "Error! Skipping the entry."
-                print "Reason: " + e
-                print "Last page collected: " + self.collector.last
+                print "Reason: " + str(e)
+                print "Last page collected: ", self.collector.last
                 print "Current title: ", self.collector.title
                 self.collector.reset()
                 continue

@@ -1,0 +1,40 @@
+Tried to insert into the DB first 100000 articles.
+(79252 were inserted, 20748 were redirecting articles, which were ignored).
+
+Contents of the articles as a string:
+time it took: 126.5 sec
+size of the DB: 1602475008 bytes (1.6 GB)
+
+Contents of the articles as a pickled string:
+time it took: 111.5 sec
+size of the DB: 1648917504 bytes (1.65 GB)
+
+Contents of the articles as a compresses string with zlib
+(compression level = 6), then pickled.
+time it took: 250 sec
+size of the DB: 1739596800 bytes (1.74 GB)
+
+Contents of the articles as a compresses string with zlib
+(compression level = 7), then pickled.
+time it took: 230 sec
+size of the DB: 1737124864 bytes (1.74 GB)
+
+
+
+For strings, on average, one article takes up 20200 bytes.
+
+Overall expected size is 1.7e11 bytes (170 GB).
+
+
+Sometimes an article is empty (text = None)
+
+Non-standard articles:
+Portal:, Wikipedia:, Category:, File:, Template:, Draft:, MediaWiki:,
+Module:
+
+Pages look sorted (sort of) alphabetically
+{http://www.mediawiki.org/xml/export-0.10/}tagname - this is how our namespace looks
+
+Overall 15901127 artickes (fifteen million)
+About 8648826 of them are normal articles and 7250557 are redirections.
+1744 are weird articles (figure that out, probably Portal etc.).
