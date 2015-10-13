@@ -4,6 +4,73 @@ import time
 import cPickle
 import zlib
 
+class Parser:
+    def __init__(self):
+        pass
+
+    """
+    Go through the XML data piecewise and store it into the database.
+    """
+    def parseData(self):
+        fName = "wikiDBxml"
+        dbName = "wikiDBsql"
+        #self.conn = self.createDatabase(dbName)
+        self.conn = sql.connect(dbName)
+
+        events = ("start", "end")
+        tree = etree.iterparse(fName, events)
+
+        #need to get the root to clear it time to time because of memory
+        event, self.root = tree.next()
+
+        startT = time.time()
+        self.cursor = self.conn.cursor()
+        self.collector = DataCollector()
+
+        for event, elem in tree:
+            #if self.collector.countTotal > 1000:
+            #    break
+            try:
+                self.oneStep(event, elem)
+            except Exception as e:
+                print "Error! Skipping the entry."
+                print "Reason: " + str(e)
+                print "Current title: ", self.collector.title
+                self.collector.reset()
+        self.conn.commit()
+        self.conn.close()
+        self.collector.reportStats()
+        print "Total time: " + str(time.time() - startT) + " sec."
+
+    def oneStep(self, event, elem):
+        try:
+            self.collector.updateValues(self, event, elem)
+        except Exception as e:
+            print "\n"
+            print e
+            self.collector.reset()
+        if self.collector.countTotal % 10000 == 0:
+            self.conn.commit()
+            self.root.clear() #clear the root
+            self.collector.countTotal += 1
+        #don't want to keep the element in memory
+        if event == "end":
+            elem.clear()
+
+    def createDatabase(self, dbname):
+        conn = sql.connect(dbname)
+        cursor = conn.cursor()
+        create = "CREATE TABLE Pages (ID integer, Title text, Contents text, Redirections text, PRIMARY KEY (ID))"
+        cursor.execute(create)
+        conn.commit()
+        return conn
+
+    def insertRow(self, ID, title, contents):
+        command = "INSERT INTO Pages VALUES (?, ?, ?, '')"
+        args = (ID, title.decode('utf-8'), contents.decode('utf-8'))
+        self.cursor.execute(command, args)
+
+
 """Collect one row of the data at a time and
 keep track of the collection state."""
 class DataCollector:
@@ -11,6 +78,8 @@ class DataCollector:
         self.title = None
         self.text = None
         self.redir = None
+        self.model = None
+        self.form = None
         #is the currect article a redirecting article?
         self.isRedir = False
         #are we at the state of collecting values for the article?
@@ -23,7 +92,7 @@ class DataCollector:
         #number of redirecting articles
         self.countRedirects = 0
         #total number of articles
-        self.countTotal = 0
+        self.countTotal = 1
         #last element collected
         self.last = "No element"
 
@@ -56,7 +125,15 @@ class DataCollector:
 
         #collect the article body
         elif elem.tag[-4:] == "text" and self.isCollecting and event == "end":
-            self.text = elem.text.encode('utf-8')
+            if elem.text is None:
+                self.text = u''
+            else:
+                self.text = elem.text.encode('utf-8')
+
+        elif elem.tag[-5:] == "model" and self.isCollecting and event == "end":
+            self.model = elem.text.encode('utf-8')
+        elif elem.tag[-6:] == "format" and self.isCollecting and event == "end":
+            self.form = elem.text.encode('utf-8')
 
         #end of the page, insert into DB
         elif elem.tag[-4:] == "page" and event == "end":
@@ -71,7 +148,7 @@ class DataCollector:
             #count serves as an ID
             try:
                 ID = self.countCollected
-                parser.insertRow(ID, self.title, self.text)
+                #parser.insertRow(ID, self.title, self.text)
                 self.countCollected += 1
                 self.last = self.title
             except Exception as e:
@@ -89,78 +166,6 @@ class DataCollector:
         print "redirects: " + str(self.countRedirects)
         print "total count: " + str(self.countTotal)
 
-
-class Parser:
-    def __init__(self):
-        pass
-
-    def createDatabase(self, dbname):
-        conn = sql.connect(dbname)
-        cursor = conn.cursor()
-        create = "CREATE TABLE Pages (ID integer, Title text, Contents text, Redirections text, PRIMARY KEY (ID))"
-        cursor.execute(create)
-        conn.commit()
-        return conn
-    
-    def insertRow(self, ID, title, contents):
-        command = "INSERT INTO Pages VALUES (?, ?, ?, '')"
-        args = (ID, title.decode('utf-8'), contents.decode('utf-8'))
-        self.cursor.execute(command, args)
-
-    def oneStep(self, event, elem):
-        try:
-            self.collector.updateValues(self, event, elem)
-        except Exception as e:
-            self.collector.reset()
-        if self.collector.countTotal % 10000 == 0:
-            self.conn.commit()
-            self.root.clear() #clear the root
-        if self.collector.countTotal % 100000 == 0:
-            perc = self.collector.countTotal / 15901127.0
-            print str(100 * perc) + " percent."
-            self.collector.countTotal += 1
-
-        #don't want to keep the element in memory
-        if event == "end":
-            elem.clear()
-    
-    """
-    Go through the XML data piecewise and store it into the database.
-    """
-    def parseData(self):
-        fName = "wikiDBxml"
-        dbName = "wikiDB.db"
-        self.conn = self.createDatabase(dbName)
-        #self.conn = sql.connect(dbName)
-    
-        events = ("start", "end")
-        tree = etree.iterparse(fName, events)
-    
-        #need to get the root to clear it time to time because of memory
-        event, self.root = tree.next()
-    
-        startT = time.time()
-        self.cursor = self.conn.cursor()
-        self.collector = DataCollector()
-    
-        for event, elem in tree:
-            if self.collector.countTotal > 100000:
-                break
-            try:
-                self.oneStep(event, elem)
-            except Exception as e:
-                print "Error! Skipping the entry."
-                print "Reason: " + str(e)
-                print "Last page collected: ", self.collector.last
-                print "Current title: ", self.collector.title
-                self.collector.reset()
-                continue
-
-        self.conn.commit()
-        self.conn.close()
-        self.collector.reportStats()
-        print "Total time: " + str(time.time() - startT) + " sec."
-    
 if __name__ == "__main__":
     parser = Parser()
     parser.parseData()

@@ -20,6 +20,10 @@ time it took: 230 sec
 size of the DB: 1737124864 bytes (1.74 GB)
 
 
+Inserting 10% of the articles.
+Took 2416 sec, 8884875264 bytes (8.88 GB)
+
+
 
 For strings, on average, one article takes up 20200 bytes.
 
