@@ -5,17 +5,14 @@ import cPickle
 import zlib
 
 class Parser:
-    def __init__(self):
-        pass
-
     """
     Go through the XML data piecewise and store it into the database.
     """
     def parseData(self):
         fName = "wikiDBxml"
-        dbName = "wikiDBsql"
-        #self.conn = self.createDatabase(dbName)
-        self.conn = sql.connect(dbName)
+        dbName = "dummy.db"
+        self.conn = self.createDatabase(dbName)
+        #self.conn = sql.connect(dbName)
 
         events = ("start", "end")
         tree = etree.iterparse(fName, events)
@@ -28,8 +25,8 @@ class Parser:
         self.collector = DataCollector()
 
         for event, elem in tree:
-            #if self.collector.countTotal > 1000:
-            #    break
+            if self.collector.countPages > 10000:
+                break
             try:
                 self.oneStep(event, elem)
             except Exception as e:
@@ -39,10 +36,12 @@ class Parser:
                 self.collector.reset()
         self.conn.commit()
         self.conn.close()
+
         self.collector.reportStats()
         print "Total time: " + str(time.time() - startT) + " sec."
 
     def oneStep(self, event, elem):
+        self.collector.countTotal += 1
         try:
             self.collector.updateValues(self, event, elem)
         except Exception as e:
@@ -52,7 +51,6 @@ class Parser:
         if self.collector.countTotal % 10000 == 0:
             self.conn.commit()
             self.root.clear() #clear the root
-            self.collector.countTotal += 1
         #don't want to keep the element in memory
         if event == "end":
             elem.clear()
@@ -60,14 +58,14 @@ class Parser:
     def createDatabase(self, dbname):
         conn = sql.connect(dbname)
         cursor = conn.cursor()
-        create = "CREATE TABLE Pages (ID integer, Title text, Contents text, Redirections text, PRIMARY KEY (ID))"
+        create = "CREATE TABLE Pages (Title text, Contents text, Redirections text, PRIMARY KEY (Title))"
         cursor.execute(create)
         conn.commit()
         return conn
 
-    def insertRow(self, ID, title, contents):
-        command = "INSERT INTO Pages VALUES (?, ?, ?, '')"
-        args = (ID, title.decode('utf-8'), contents.decode('utf-8'))
+    def insertRow(self, title, contents):
+        command = "INSERT INTO Pages VALUES (?, ?, '')"
+        args = (title.decode('utf-8'), contents.decode('utf-8'))
         self.cursor.execute(command, args)
 
 
@@ -78,8 +76,6 @@ class DataCollector:
         self.title = None
         self.text = None
         self.redir = None
-        self.model = None
-        self.form = None
         #is the currect article a redirecting article?
         self.isRedir = False
         #are we at the state of collecting values for the article?
@@ -87,18 +83,12 @@ class DataCollector:
         self.isCollecting = False
         #number of collected articles
         self.countCollected = 0
-        #not collected articles because incomplete
-        self.countNotCollected = 0
         #number of redirecting articles
         self.countRedirects = 0
-        #total number of articles
+        #total number of tags
         self.countTotal = 1
-        #last element collected
-        self.last = "No element"
-
-    """Check whether all values of a row are populated"""
-    def allCollected(self):
-        return None not in [self.title, self.text]
+        #total number of articles
+        self.countPages = 0
 
     """After we have collected a row, we reset all state variables"""
     def reset(self):
@@ -112,7 +102,7 @@ class DataCollector:
         #registered start of a page
         if elem.tag[-4:] == "page" and event == "start":
             self.isCollecting = True
-            self.countTotal += 1
+            self.countPages += 1
 
         #this page is a redirecting page
         elif elem.tag[-8:] == "redirect" and self.isCollecting:
@@ -143,28 +133,20 @@ class DataCollector:
         if self.isRedir:
             self.countRedirects += 1
             #right now skipping the redirecting articles
-            self.last = self.title
-        elif self.allCollected():
-            #count serves as an ID
+        else:
             try:
-                ID = self.countCollected
-                #parser.insertRow(ID, self.title, self.text)
+                parser.insertRow(self.title, self.text)
                 self.countCollected += 1
-                self.last = self.title
             except Exception as e:
                 print "Unable to insert row."
                 print "Reason: " + str(e)
                 print "Title: ", self.title
-                self.countNotCollected += 1
-        else:
-            self.countNotCollected += 1
         self.reset()
 
     def reportStats(self):
         print "collected: " + str(self.countCollected)
-        print "unable to collect: " + str(self.countNotCollected)
         print "redirects: " + str(self.countRedirects)
-        print "total count: " + str(self.countTotal)
+        print "total count: " + str(self.countPages)
 
 if __name__ == "__main__":
     parser = Parser()
