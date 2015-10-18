@@ -10,9 +10,10 @@ class Parser:
     """
     def parseData(self):
         fName = "wikiDBxml"
-        dbName = "dummy.db"
-        self.conn = self.createDatabase(dbName)
-        #self.conn = sql.connect(dbName)
+        dbName = "wikiDBsql"
+        #dbName = "dummy.db"
+        #self.conn = self.createDatabase(dbName)
+        self.conn = sql.connect(dbName)
 
         events = ("start", "end")
         tree = etree.iterparse(fName, events)
@@ -25,8 +26,6 @@ class Parser:
         self.collector = DataCollector()
 
         for event, elem in tree:
-            if self.collector.countPages > 10000:
-                break
             try:
                 self.oneStep(event, elem)
             except Exception as e:
@@ -35,20 +34,31 @@ class Parser:
                 print "Current title: ", self.collector.title
                 self.collector.reset()
         self.conn.commit()
-        self.conn.close()
+
+        print "Time it took: " + str(time.time() - startT) + " seconds."
 
         self.collector.reportStats()
-        print "Total time: " + str(time.time() - startT) + " sec."
+        print "Data collected. Inserting links..."
+        for ID in self.collector.links:
+            links = "::".join(self.collector.links[ID])
+            args = (links.decode("utf-8"), ID)
+            self.cursor.execute("UPDATE Pages SET Redirections = ? WHERE ID = ?", args)
+        self.conn.commit()
+        print "Links inserted"
+
+        self.conn.close()
 
     def oneStep(self, event, elem):
         self.collector.countTotal += 1
+        self.collector.countTags += 1
         try:
             self.collector.updateValues(self, event, elem)
         except Exception as e:
             print "\n"
             print e
             self.collector.reset()
-        if self.collector.countTotal % 10000 == 0:
+        if self.collector.countTags > 100000 and event == "end":
+            self.collector.countTags = 0
             self.conn.commit()
             self.root.clear() #clear the root
         #don't want to keep the element in memory
@@ -58,14 +68,14 @@ class Parser:
     def createDatabase(self, dbname):
         conn = sql.connect(dbname)
         cursor = conn.cursor()
-        create = "CREATE TABLE Pages (Title text, Contents text, Redirections text, PRIMARY KEY (Title))"
+        create = "CREATE TABLE Pages (ID integer, Title text, Contents text, Redirections text, PRIMARY KEY (ID))"
         cursor.execute(create)
         conn.commit()
         return conn
 
-    def insertRow(self, title, contents):
-        command = "INSERT INTO Pages VALUES (?, ?, '')"
-        args = (title.decode('utf-8'), contents.decode('utf-8'))
+    def insertRow(self, ID, title, contents):
+        command = "INSERT INTO Pages VALUES (?, ?, ?, '')"
+        args = (ID, title.decode('utf-8'), contents.decode('utf-8'))
         self.cursor.execute(command, args)
 
 
@@ -75,7 +85,7 @@ class DataCollector:
     def __init__(self):
         self.title = None
         self.text = None
-        self.redir = None
+        self.redirTo = None
         #is the currect article a redirecting article?
         self.isRedir = False
         #are we at the state of collecting values for the article?
@@ -86,9 +96,11 @@ class DataCollector:
         #number of redirecting articles
         self.countRedirects = 0
         #total number of tags
-        self.countTotal = 1
+        self.countTotal = 0
         #total number of articles
         self.countPages = 0
+        self.countTags = 0
+        self.links = dict()
 
     """After we have collected a row, we reset all state variables"""
     def reset(self):
@@ -106,7 +118,7 @@ class DataCollector:
 
         #this page is a redirecting page
         elif elem.tag[-8:] == "redirect" and self.isCollecting:
-           self.redir = elem.attrib["title"].encode('utf-8')
+           self.redirTo = self.countPages
            self.isRedir = True
 
         #collect a title
@@ -132,10 +144,13 @@ class DataCollector:
     def insertValues(self, parser):
         if self.isRedir:
             self.countRedirects += 1
-            #right now skipping the redirecting articles
+            if self.redirTo not in self.links:
+                self.links[self.redirTo] = [self.title]
+            else:
+                self.links[self.redirTo].append(self.title)
         else:
             try:
-                parser.insertRow(self.title, self.text)
+                parser.insertRow(self.countPages, self.title, self.text)
                 self.countCollected += 1
             except Exception as e:
                 print "Unable to insert row."
